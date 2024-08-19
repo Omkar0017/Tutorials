@@ -83,3 +83,7 @@ public class KafkaConsumerService {
 
 
 
+
+
+        Object message = record.value();
+handleAvroMessageForTopic3((YourAvroModel3) message);
