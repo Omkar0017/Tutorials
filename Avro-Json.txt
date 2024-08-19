@@ -87,3 +87,10 @@ public class KafkaConsumerService {
 
         Object message = record.value();
 handleAvroMessageForTopic3((YourAvroModel3) message);
+
+
+//
+
+        String json = AvroUtils.avroToJson(avroRecord);
+        // Deserialize the JSON to the target class
+        objectMapper.readValue(json, targetClass);
