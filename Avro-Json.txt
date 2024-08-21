@@ -1,304 +1,123 @@
-<dependencies>
-    <!-- Kafka dependencies -->
-    <dependency>
-        <groupId>org.springframework.kafka</groupId>
-        <artifactId>spring-kafka</artifactId>
-    </dependency>
-
-    <!-- Avro dependencies -->
-    <dependency>
-        <groupId>io.confluent</groupId>
-        <artifactId>kafka-avro-serializer</artifactId>
-        <version>6.2.0</version>
-    </dependency>
-
-    <!-- JSON processing -->
-    <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-    </dependency>
-</dependencies>
-
-
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.avro.generic.GenericRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.AvroUtils;
-import org.springframework.stereotype.Service;
-
-import java.util.Map;
-
-@Service
-public class KafkaConsumerService {
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @KafkaListener(topics = {"topic1", "topic2", "topic3", "topic4", "topic5", "topic6", "topic7", "topic8"})
-    public void consumeMessage(ConsumerRecord<String, Object> record) {
-        String topic = record.topic();
-        Object message = record.value();
-
-        if (message instanceof String) {
-            handleStringMessage(topic, (String) message);
-        } else if (message instanceof GenericRecord) {
-            handleAvroMessage(topic, (GenericRecord) message);
-        }
-    }
-
-    private void handleStringMessage(String topic, String message) {
-        try {
-            JsonNode jsonNode = objectMapper.readTree(message);
-            extractFieldsFromJson(topic, jsonNode);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void handleAvroMessage(String topic, GenericRecord avroRecord) {
-        try {
-            String json = AvroUtils.avroToJson(avroRecord);
-            JsonNode jsonNode = objectMapper.readTree(json);
-            extractFieldsFromJson(topic, jsonNode);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void extractFieldsFromJson(String topic, JsonNode jsonNode) {
-        // Extract fields from JSON based on topic
-        switch (topic) {
-            case "topic1":
-                // Extract specific fields from JSON for topic1
-                break;
-            case "topic2":
-                // Extract specific fields from JSON for topic2
-                break;
-            // Add cases for other topics
-        }
-    }
-}
-
-
-
-
-
-        Object message = record.value();
-handleAvroMessageForTopic3((YourAvroModel3) message);
-
-
-//
-
-        String json = AvroUtils.avroToJson(avroRecord);
-        // Deserialize the JSON to the target class
-        objectMapper.readValue(json, targetClass);
-
-
-
-
-
-
-
-
-
-
---//-/-
-
-
-{
-  "type": "record",
-  "name": "Record",
-  "fields": [
-    {
-      "name": "clientRequestID.source",
-      "type": "string"
-    },
-    {
-      "name": "clientRequestID.id",
-      "type": "string"
-    },
-    {
-      "name": "firstClientRequestID.source",
-      "type": "string"
-    },
-    {
-      "name": "firstClientRequestID.id",
-      "type": "string"
-    },
-    {
-      "name": "settlementStatus",
-      "type": "string"
-    },
-    {
-      "name": "instructionStatus",
-      "type": "string"
-    },
-    {
-      "name": "latestSettlementConfirmation.source",
-      "type": "string"
-    },
-    {
-      "name": "latestSettlementConfirmation.id",
-      "type": "string"
-    }
-  ]
-}
-
-
-
-
-import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.junit.jupiter.api.Test;
-
-import java.io.IOException;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-public class AvroUnitTest {
-
-    @Test
-    public void testJsonToGenericRecord() throws IOException {
-        // Define the schema
-        String userSchema = "{"
-            + "\"type\": \"record\","
-            + "\"name\": \"User\","
-            + "\"fields\": ["
-            + "  {\"name\": \"id\", \"type\": \"int\"},"
-            + "  {\"name\": \"name\", \"type\": \"string\"},"
-            + "  {"
-            + "    \"name\": \"address\","
-            + "    \"type\": {"
-            + "      \"type\": \"record\","
-            + "      \"name\": \"Address\","
-            + "      \"fields\": ["
-            + "        {\"name\": \"street\", \"type\": \"string\"},"
-            + "        {\"name\": \"city\", \"type\": \"string\"},"
-            + "        {\"name\": \"zip\", \"type\": \"string\"}"
-            + "      ]"
-            + "    }"
-            + "  }"
-            + "]"
-            + "}";
-        
-        Schema schema = new Schema.Parser().parse(userSchema);
-
-        // Read JSON data from file
-        String jsonFilePath = "src/test/resources/user.json";
-        String jsonString = readJsonFile(jsonFilePath);
-
-        // Convert JSON to GenericRecord
-        GenericRecord userRecord = jsonToGenericRecord(jsonString, schema);
-
-        // Now create a ConsumerRecord with the GenericRecord
-        ConsumerRecord<String, GenericRecord> consumerRecord = new ConsumerRecord<>(
-            "user-topic",    // Topic name
-            0,               // Partition number
-            0L,              // Offset
-            "user-key",      // Key
-            userRecord       // Value (GenericRecord)
-        );
-
-        // Example assertion - Verify that the record was created as expected
-        assertEquals(1, consumerRecord.value().get("id"));
-        assertEquals("John Doe", consumerRecord.value().get("name"));
-
-        // Access nested fields
-        GenericRecord address = (GenericRecord) consumerRecord.value().get("address");
-        assertEquals("123 Main St", address.get("street"));
-        assertEquals("Springfield", address.get("city"));
-        assertEquals("12345", address.get("zip"));
-    }
-
-    private String readJsonFile(String filePath) throws IOException {
-        return new String(Files.readAllBytes(Paths.get(filePath)));
-    }
-
-    private GenericRecord jsonToGenericRecord(String jsonString, Schema schema) throws IOException {
-        GenericDatumReader<GenericRecord> reader = new GenericDatumReader<>(schema);
-        Decoder decoder = DecoderFactory.get().jsonDecoder(schema, jsonString);
-        return reader.read(null, decoder);
-    }
-}
-
---------
-
+import static org.junit.Assert.assertEquals;
 
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import org.apache.avro.generic.GenericRecordBuilder;
+import org.junit.Before;
+import org.junit.Test;
 
-public class AvroUnitTest {
+public class AvroMessageTest {
+
+    private Schema schema;
+    private GenericRecord messageRecord;
+
+    @Before
+    public void setUp() {
+        // Define the schema
+        String schemaStr = "{\n" +
+                "  \"type\": \"record\",\n" +
+                "  \"name\": \"Message\",\n" +
+                "  \"fields\": [\n" +
+                "    {\n" +
+                "      \"name\": \"clientRequestID\",\n" +
+                "      \"type\": {\n" +
+                "        \"type\": \"record\",\n" +
+                "        \"name\": \"ClientRequestID\",\n" +
+                "        \"fields\": [\n" +
+                "          {\"name\": \"source\", \"type\": \"string\"},\n" +
+                "          {\"name\": \"id\", \"type\": \"string\"}\n" +
+                "        ]\n" +
+                "      }\n" +
+                "    },\n" +
+                "    {\n" +
+                "      \"name\": \"firstClientRequestID\",\n" +
+                "      \"type\": \"ClientRequestID\"\n" +
+                "    },\n" +
+                "    {\n" +
+                "      \"name\": \"settlementStatus\",\n" +
+                "      \"type\": \"string\"\n" +
+                "    },\n" +
+                "    {\n" +
+                "      \"name\": \"instructionStatus\",\n" +
+                "      \"type\": \"string\"\n" +
+                "    },\n" +
+                "    {\n" +
+                "      \"name\": \"latestSettlementConfirmation\",\n" +
+                "      \"type\": \"ClientRequestID\"\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
+
+        // Parse the schema
+        schema = new Schema.Parser().parse(schemaStr);
+
+        // Create the GenericRecord instance with the provided data
+        messageRecord = createMessageRecord();
+    }
+
+    private GenericRecord createMessageRecord() {
+        // Create nested records for "clientRequestID" and others
+        Schema clientRequestIDSchema = schema.getField("clientRequestID").schema();
+
+        GenericRecord clientRequestID = new GenericRecordBuilder(clientRequestIDSchema)
+                .set("source", "abc")
+                .set("id", "1234")
+                .build();
+
+        GenericRecord firstClientRequestID = new GenericRecordBuilder(clientRequestIDSchema)
+                .set("source", "xyz")
+                .set("id", "789")
+                .build();
+
+        GenericRecord latestSettlementConfirmation = new GenericRecordBuilder(clientRequestIDSchema)
+                .set("source", "jkl")
+                .set("id", "567")
+                .build();
+
+        // Create the main record
+        return new GenericRecordBuilder(schema)
+                .set("clientRequestID", clientRequestID)
+                .set("firstClientRequestID", firstClientRequestID)
+                .set("settlementStatus", "close")
+                .set("instructionStatus", "instructionStatus")
+                .set("latestSettlementConfirmation", latestSettlementConfirmation)
+                .build();
+    }
 
     @Test
-    public void testConsumerRecordWithGenericRecord() {
-        // Parse the schema
-        String userSchema = "{"
-            + "\"type\": \"record\","
-            + "\"name\": \"User\","
-            + "\"fields\": ["
-            + "  {\"name\": \"id\", \"type\": \"int\"},"
-            + "  {\"name\": \"name\", \"type\": \"string\"},"
-            + "  {"
-            + "    \"name\": \"address\","
-            + "    \"type\": {"
-            + "      \"type\": \"record\","
-            + "      \"name\": \"Address\","
-            + "      \"fields\": ["
-            + "        {\"name\": \"street\", \"type\": \"string\"},"
-            + "        {\"name\": \"city\", \"type\": \"string\"},"
-            + "        {\"name\": \"zip\", \"type\": \"string\"}"
-            + "      ]"
-            + "    }"
-            + "  }"
-            + "]"
-            + "}";
-        
-        Schema schema = new Schema.Parser().parse(userSchema);
+    public void testClientRequestID() {
+        // Verify clientRequestID values
+        GenericRecord clientRequestID = (GenericRecord) messageRecord.get("clientRequestID");
+        assertEquals("abc", clientRequestID.get("source"));
+        assertEquals("1234", clientRequestID.get("id"));
+    }
 
-        // Create the nested Address record
-        Schema addressSchema = schema.getField("address").schema();
-        GenericRecord addressRecord = new GenericData.Record(addressSchema);
-        addressRecord.put("street", "123 Main St");
-        addressRecord.put("city", "Springfield");
-        addressRecord.put("zip", "12345");
+    @Test
+    public void testFirstClientRequestID() {
+        // Verify firstClientRequestID values
+        GenericRecord firstClientRequestID = (GenericRecord) messageRecord.get("firstClientRequestID");
+        assertEquals("xyz", firstClientRequestID.get("source"));
+        assertEquals("789", firstClientRequestID.get("id"));
+    }
 
-        // Create the User record and set fields
-        GenericRecord userRecord = new GenericData.Record(schema);
-        userRecord.put("id", 1);
-        userRecord.put("name", "John Doe");
-        userRecord.put("address", addressRecord);
+    @Test
+    public void testSettlementStatus() {
+        // Verify settlementStatus value
+        assertEquals("close", messageRecord.get("settlementStatus"));
+    }
 
-        // Now create a ConsumerRecord with the GenericRecord
-        ConsumerRecord<String, GenericRecord> consumerRecord = new ConsumerRecord<>(
-            "user-topic",    // Topic name
-            0,               // Partition number
-            0L,              // Offset
-            "user-key",      // Key
-            userRecord       // Value (GenericRecord)
-        );
+    @Test
+    public void testInstructionStatus() {
+        // Verify instructionStatus value
+        assertEquals("instructionStatus", messageRecord.get("instructionStatus"));
+    }
 
-        // Example assertion - Verify that the record was created as expected
-        assertEquals(1, ((GenericRecord) consumerRecord.value()).get("id"));
-        assertEquals("John Doe", ((GenericRecord) consumerRecord.value()).get("name"));
-
-        // Access nested fields
-        GenericRecord address = (GenericRecord) ((GenericRecord) consumerRecord.value()).get("address");
-        assertEquals("123 Main St", address.get("street"));
-        assertEquals("Springfield", address.get("city"));
-        assertEquals("12345", address.get("zip"));
-
-        // Now you can use the consumerRecord in your unit tests
+    @Test
+    public void testLatestSettlementConfirmation() {
+        // Verify latestSettlementConfirmation values
+        GenericRecord latestSettlementConfirmation = (GenericRecord) messageRecord.get("latestSettlementConfirmation");
+        assertEquals("jkl", latestSettlementConfirmation.get("source"));
+        assertEquals("567", latestSettlementConfirmation.get("id"));
     }
 }
-
-
-
-
-
