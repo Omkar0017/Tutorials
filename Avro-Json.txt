@@ -94,3 +94,138 @@ handleAvroMessageForTopic3((YourAvroModel3) message);
         String json = AvroUtils.avroToJson(avroRecord);
         // Deserialize the JSON to the target class
         objectMapper.readValue(json, targetClass);
+
+
+
+
+
+
+
+
+
+
+--//-/-
+
+
+{
+  "type": "record",
+  "name": "Record",
+  "fields": [
+    {
+      "name": "clientRequestID.source",
+      "type": "string"
+    },
+    {
+      "name": "clientRequestID.id",
+      "type": "string"
+    },
+    {
+      "name": "firstClientRequestID.source",
+      "type": "string"
+    },
+    {
+      "name": "firstClientRequestID.id",
+      "type": "string"
+    },
+    {
+      "name": "settlementStatus",
+      "type": "string"
+    },
+    {
+      "name": "instructionStatus",
+      "type": "string"
+    },
+    {
+      "name": "latestSettlementConfirmation.source",
+      "type": "string"
+    },
+    {
+      "name": "latestSettlementConfirmation.id",
+      "type": "string"
+    }
+  ]
+}
+
+
+
+
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class AvroUnitTest {
+
+    @Test
+    public void testJsonToGenericRecord() throws IOException {
+        // Define the schema
+        String userSchema = "{"
+            + "\"type\": \"record\","
+            + "\"name\": \"User\","
+            + "\"fields\": ["
+            + "  {\"name\": \"id\", \"type\": \"int\"},"
+            + "  {\"name\": \"name\", \"type\": \"string\"},"
+            + "  {"
+            + "    \"name\": \"address\","
+            + "    \"type\": {"
+            + "      \"type\": \"record\","
+            + "      \"name\": \"Address\","
+            + "      \"fields\": ["
+            + "        {\"name\": \"street\", \"type\": \"string\"},"
+            + "        {\"name\": \"city\", \"type\": \"string\"},"
+            + "        {\"name\": \"zip\", \"type\": \"string\"}"
+            + "      ]"
+            + "    }"
+            + "  }"
+            + "]"
+            + "}";
+        
+        Schema schema = new Schema.Parser().parse(userSchema);
+
+        // Read JSON data from file
+        String jsonFilePath = "src/test/resources/user.json";
+        String jsonString = readJsonFile(jsonFilePath);
+
+        // Convert JSON to GenericRecord
+        GenericRecord userRecord = jsonToGenericRecord(jsonString, schema);
+
+        // Now create a ConsumerRecord with the GenericRecord
+        ConsumerRecord<String, GenericRecord> consumerRecord = new ConsumerRecord<>(
+            "user-topic",    // Topic name
+            0,               // Partition number
+            0L,              // Offset
+            "user-key",      // Key
+            userRecord       // Value (GenericRecord)
+        );
+
+        // Example assertion - Verify that the record was created as expected
+        assertEquals(1, consumerRecord.value().get("id"));
+        assertEquals("John Doe", consumerRecord.value().get("name"));
+
+        // Access nested fields
+        GenericRecord address = (GenericRecord) consumerRecord.value().get("address");
+        assertEquals("123 Main St", address.get("street"));
+        assertEquals("Springfield", address.get("city"));
+        assertEquals("12345", address.get("zip"));
+    }
+
+    private String readJsonFile(String filePath) throws IOException {
+        return new String(Files.readAllBytes(Paths.get(filePath)));
+    }
+
+    private GenericRecord jsonToGenericRecord(String jsonString, Schema schema) throws IOException {
+        GenericDatumReader<GenericRecord> reader = new GenericDatumReader<>(schema);
+        Decoder decoder = DecoderFactory.get().jsonDecoder(schema, jsonString);
+        return reader.read(null, decoder);
+    }
+}
+
+
+
+
+
+
