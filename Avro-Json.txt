@@ -121,3 +121,55 @@ public class AvroMessageTest {
         assertEquals("567", latestSettlementConfirmation.get("id"));
     }
 }
+
+
+--------
+
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.Decoder;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.specific.SpecificDatumReader;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.mockito.Mockito.*;
+
+class YourTestClass {
+
+    @Test
+    void testYourMethod() throws IOException {
+        // Load the Avro schema
+        Schema schema = new Schema.Parser().parse(getClass().getResourceAsStream("/schema.avsc"));
+
+        // Parse the JSON message into a GenericData.Record
+        String json = "{\"name\": \"John Doe\", \"age\": 30}";
+        GenericRecord record = createGenericRecordFromJson(json, schema);
+
+        // Create a mock ConsumerRecord with String key and GenericData.Record value
+        ConsumerRecord<String, GenericData.Record> consumerRecord = new ConsumerRecord<>(
+                "your-topic", 0, 0L, "key", record);
+
+        // Call your method with the mock ConsumerRecord
+        yourMethod(consumerRecord);
+
+        // Add assertions to verify the expected behavior
+    }
+
+    // Utility method to convert JSON to GenericRecord
+    private GenericRecord createGenericRecordFromJson(String json, Schema schema) throws IOException {
+        DatumReader<GenericRecord> reader = new SpecificDatumReader<>(schema);
+        Decoder decoder = DecoderFactory.get().jsonDecoder(schema, json);
+        return reader.read(null, decoder);
+    }
+
+    // Replace this with your actual method
+    private void yourMethod(ConsumerRecord<String, GenericData.Record> consumerRecord) {
+        // Your method logic here
+    }
+}
+
