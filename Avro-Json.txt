@@ -173,3 +173,40 @@ class YourTestClass {
     }
 }
 
+
+---------
+
+{
+  "type": "record",
+  "name": "Transaction",
+  "fields": [
+    {
+      "name": "transactionReference",
+      "type": "string"
+    },
+    {
+      "name": "sequenceId",
+      "type": "string"
+    },
+    {
+      "name": "activityType",
+      "type": "string"
+    },
+    {
+      "name": "confirmationId",
+      "type": "string"
+    },
+    {
+      "name": "instructionStatus",
+      "type": "string"
+    },
+    {
+      "name": "tradeId",
+      "type": "string"
+    }
+  ]
+}
+
+
+
+
