@@ -3,4 +3,7 @@ index=<your_index> sourcetype=<your_sourcetype>
 
 
 
+index=<your_index> sourcetype=<your_sourcetype>
+| rex field=_raw "^(?<application>[^\t]+)\t(?<topic>[^\t]+)\t(?<key>[^\t]+)"
+| table application topic key
 
