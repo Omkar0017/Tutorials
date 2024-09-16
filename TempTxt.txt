@@ -1,0 +1,241 @@
+
+
+User
+You said:
+I have 2 kafka clusters and 20 topics in total. 10 in each cluster. Also few topics have have string schema and few have avro schema. I want to create a kafka listener using spring boot. I want to write it in a dynamic manner so that if new topics are added I won't have to change the code rather I will have to add topic in application.yml file.I want to add exception handling so that consumers don't go down.
+ChatGPT said:
+ChatGPT
+To create a dynamic Kafka listener in Spring Boot that supports multiple clusters, handles different schemas (Avro, String), and ensures consumers don't go down due to errors, you can break it into several steps. Here’s how you can approach it:
+
+1. Kafka Configuration
+Start by configuring the connection to your Kafka clusters dynamically via the application.yml. This file will contain the list of topics per cluster and their respective configurations.
+
+application.yml:
+
+yaml
+Copy code
+spring:
+  kafka:
+    clusters:
+      cluster1:
+        bootstrap-servers: localhost:9092
+        group-id: group1
+        topics:
+          - topic1
+          - topic2
+      cluster2:
+        bootstrap-servers: localhost:9093
+        group-id: group2
+        topics:
+          - topic3
+          - topic4
+
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        schema.registry.url: http://localhost:8081  # For Avro schemas
+    specific-avro-reader: true
+Here, we have defined the Kafka clusters, topics, and consumer properties in application.yml. You can simply add new topics here without changing the code.
+
+2. Dynamic Kafka Listener Registration
+Create a custom configuration class to register Kafka listeners dynamically for the topics. This can be achieved using ConcurrentKafkaListenerContainerFactory and dynamically binding it to the topics based on configuration.
+
+KafkaConfig.java:
+
+java
+Copy code
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ConsumerAwareListenerErrorHandler;
+import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+import org.springframework.kafka.listener.config.ContainerProperties;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer2;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Configuration
+public class KafkaConfig {
+
+    @Value("${spring.kafka.clusters.cluster1.bootstrap-servers}")
+    private String cluster1BootstrapServers;
+
+    @Value("${spring.kafka.clusters.cluster2.bootstrap-servers}")
+    private String cluster2BootstrapServers;
+
+    @Value("${spring.kafka.clusters.cluster1.group-id}")
+    private String cluster1GroupId;
+
+    @Value("${spring.kafka.clusters.cluster2.group-id}")
+    private String cluster2GroupId;
+
+    @Value("${spring.kafka.clusters.cluster1.topics}")
+    private List<String> cluster1Topics;
+
+    @Value("${spring.kafka.clusters.cluster2.topics}")
+    private List<String> cluster2Topics;
+
+    // Consumer Factory for Cluster 1
+    @Bean
+    public ConsumerFactory<String, Object> consumerFactoryCluster1() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, cluster1BootstrapServers);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, cluster1GroupId);
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+        props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class.getName());
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    // Consumer Factory for Cluster 2
+    @Bean
+    public ConsumerFactory<String, Object> consumerFactoryCluster2() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, cluster2BootstrapServers);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, cluster2GroupId);
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+        props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class.getName());
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    // Listener Container Factory for Cluster 1
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactoryCluster1() {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactoryCluster1());
+        factory.setConcurrency(3);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        return factory;
+    }
+
+    // Listener Container Factory for Cluster 2
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactoryCluster2() {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactoryCluster2());
+        factory.setConcurrency(3);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        return factory;
+    }
+
+    // Error Handler
+    @Bean
+    public ConsumerAwareListenerErrorHandler errorHandler() {
+        return (message, exception, consumer) -> {
+            System.out.println("Error in process with Exception " + exception.getMessage());
+            return null; // Optionally reprocess, skip or log
+        };
+    }
+
+    // Kafka Listeners for dynamic topics from Cluster 1
+    @KafkaListener(topics = "#{'${spring.kafka.clusters.cluster1.topics}'.split(',')}",
+            containerFactory = "kafkaListenerContainerFactoryCluster1",
+            errorHandler = "errorHandler")
+    public void listenCluster1(ConsumerRecord<String, Object> message) {
+        System.out.println("Received from Cluster 1: " + message.value());
+        // Process message
+    }
+
+    // Kafka Listeners for dynamic topics from Cluster 2
+    @KafkaListener(topics = "#{'${spring.kafka.clusters.cluster2.topics}'.split(',')}",
+            containerFactory = "kafkaListenerContainerFactoryCluster2",
+            errorHandler = "errorHandler")
+    public void listenCluster2(ConsumerRecord<String, Object> message) {
+        System.out.println("Received from Cluster 2: " + message.value());
+        // Process message
+    }
+}
+3. Dynamic Schema Deserialization
+To handle both Avro and String schemas, you can use Kafka's ErrorHandlingDeserializer. The key is to register appropriate deserializers for each schema.
+
+For Avro, you’ll need to add the Confluent Schema Registry dependencies and set up Avro deserialization.
+
+pom.xml:
+
+xml
+Copy code
+<dependency>
+    <groupId>io.confluent</groupId>
+    <artifactId>kafka-avro-serializer</artifactId>
+    <version>7.2.1</version> <!-- or latest version -->
+</dependency>
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>3.2.0</version> <!-- or latest version -->
+</dependency>
+<dependency>
+    <groupId>org.springframework.kafka</groupId>
+    <artifactId>spring-kafka</artifactId>
+    <version>2.7.0</version> <!-- or latest version -->
+</dependency>
+Update application.yml with the Avro-specific configuration:
+
+yaml
+Copy code
+spring:
+  kafka:
+    consumer:
+      properties:
+        schema.registry.url: http://localhost:8081  # Schema registry for Avro schemas
+      specific-avro-reader: true
+In your KafkaConfig.java, when you configure deserialization, set up the Avro deserializer for topics with Avro schema.
+
+java
+Copy code
+props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
+props.put("schema.registry.url", "http://localhost:8081");
+4. Error Handling
+In the errorHandler() bean, you can handle exceptions that occur while processing the Kafka messages. You can log errors, skip messages, or implement custom retry logic. This ensures that if an error occurs in one of the consumers, it doesn't bring down the entire listener.
+
+For example:
+
+java
+Copy code
+@Bean
+public ConsumerAwareListenerErrorHandler errorHandler() {
+    return (message, exception, consumer) -> {
+        System.out.println("Error in process with Exception " + exception.getMessage());
+        // Log and skip problematic messages
+        return null;
+    };
+}
+5. Scaling & Fault Tolerance
+You can adjust concurrency (factory.setConcurrency(3);) based on the number of partitions and expected load to scale the consumer. This ensures the application can handle a high volume of messages without overwhelming the consumer.
+
+6. Dynamic Addition of Topics
+By following the configuration in the application.yml, you can add new topics simply by appending them to the topic list under each cluster. The @KafkaListener annotations will pick up the topics dynamically without requiring code changes.
+
+7. Monitoring and Metrics
+Consider using Spring Actuator to monitor Kafka consumer metrics, such as the number of messages processed, error rates, and consumer lag, to ensure the health of your consumers.
+
+This setup ensures that:
+
+You handle multiple Kafka clusters dynamically.
+The consumers are resilient to errors.
+You can handle multiple types of message schemas (Avro, String).
+You can add new topics via configuration without changing code.
+
+
+
+Is this conversation helpful so far?
+
+
+
+
+
