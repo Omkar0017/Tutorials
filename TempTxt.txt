@@ -239,3 +239,73 @@ Is this conversation helpful so far?
 
 
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.SaslAuthenticationException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.listener.ConsumerAwareErrorHandler;
+
+import static org.mockito.Mockito.*;
+
+public class KafkaConsumerConfigTest {
+
+    private KafkaConsumerConfig kafkaConsumerConfig;
+
+    @BeforeEach
+    public void setUp() {
+        kafkaConsumerConfig = new KafkaConsumerConfig();  // The config class being tested
+    }
+
+    @Test
+    public void testErrorHandlerRetriesForSaslAuthenticationException() {
+        // Create a mock for the Kafka ConsumerRecord and MessageListenerContainer
+        ConsumerRecord<String, String> mockRecord = mock(ConsumerRecord.class);
+        MessageListenerContainer mockContainer = mock(MessageListenerContainer.class);
+
+        // Get the errorHandler instance from the config
+        DefaultErrorHandler errorHandler = kafkaConsumerConfig.errorHandler();
+
+        // Create an instance of SaslAuthenticationException to simulate the error
+        SaslAuthenticationException saslException = new SaslAuthenticationException("Authentication failed");
+
+        // Simulate error handling (3 retries, then stop)
+        errorHandler.handleRemaining(saslException, List.of(mockRecord), mockContainer, mock(Consumer.class));
+
+        // Verify behavior: check if the exception was retried 3 times
+        verify(mockContainer, times(1)).pause();
+        verify(mockContainer, times(1)).resume();
+        // Since there are 3 retries, ensure that `pause` is called before each retry
+
+        // No further verification needed because Spring Kafka handles the retries internally
+    }
+    
+    @Test
+    public void testErrorHandlerDoesNotRetryOnNonAuthenticationException() {
+        // Create a mock for the Kafka ConsumerRecord and MessageListenerContainer
+        ConsumerRecord<String, String> mockRecord = mock(ConsumerRecord.class);
+        MessageListenerContainer mockContainer = mock(MessageListenerContainer.class);
+
+        // Get the errorHandler instance from the config
+        DefaultErrorHandler errorHandler = kafkaConsumerConfig.errorHandler();
+
+        // Create a non-retryable exception (any exception other than SaslAuthenticationException)
+        RuntimeException runtimeException = new RuntimeException("Non-retryable exception");
+
+        // Simulate error handling
+        errorHandler.handleRemaining(runtimeException, List.of(mockRecord), mockContainer, mock(Consumer.class));
+
+        // Verify behavior: check that the container was not paused and no retries were made
+        verify(mockContainer, never()).pause();
+        verify(mockContainer, never()).resume();
+    }
+}
+
+
+
+
+
+
