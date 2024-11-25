@@ -16,3 +16,18 @@ index=main
 | rex max_match=0 field=_raw "(?<log_block>BUILD_INFO_TAG_BEGINS(.*?(\r?\n).*?)*?BUILD_INFO_TAG_ENDS)"
 | mvexpand log_block
 | table _time log_block
+
+
+| rex max_match=0 field=_raw "(?<app_details><BUILD_INFO_TAG_BEGINS>.*?<BUILD_INFO_TAG_ENDS>)"
+| eval app_details=replace(app_details, "<BUILD_INFO_TAG_BEGINS>|<BUILD_INFO_TAG_ENDS>", "")
+| mvexpand app_details
+| table _time app_details
+
+
+index=foo
+| eval marker=case(like(_raw, "%<BUILD_INFO_TAG_BEGINS>%"), "start", like(_raw, "%<BUILD_INFO_TAG_ENDS>%"), "end", true(), null())
+| streamstats count(marker) as session_id reset_on_change=true
+| stats values(_raw) as logs by session_id
+| eval app_details=mvjoin(logs, "\n")
+| where isnotnull(app_details)
+| table _time app_details
