@@ -3,3 +3,10 @@
 | where match_group > 0
 | streamstats window=5 current=f last(match_flag) as relevant_flag by match_group
 | where relevant_flag=1
+
+
+
+index=main
+| rex max_match=0 field=_raw "(?<log_block>START_EXPRESSION(.*?(\r?\n).*?)*?END_EXPRESSION)"
+| mvexpand log_block
+| table _time log_block
