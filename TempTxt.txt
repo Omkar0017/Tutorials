@@ -10,3 +10,9 @@ index=main
 | rex max_match=0 field=_raw "(?<log_block>START_EXPRESSION(.*?(\r?\n).*?)*?END_EXPRESSION)"
 | mvexpand log_block
 | table _time log_block
+
+
+index=main
+| rex max_match=0 field=_raw "(?<log_block>BUILD_INFO_TAG_BEGINS(.*?(\r?\n).*?)*?BUILD_INFO_TAG_ENDS)"
+| mvexpand log_block
+| table _time log_block
