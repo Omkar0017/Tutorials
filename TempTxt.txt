@@ -31,3 +31,12 @@ index=foo
 | eval app_details=mvjoin(logs, "\n")
 | where isnotnull(app_details)
 | table _time app_details
+
+
+
+
+index=your_index sourcetype=your_sourcetype
+| rex field=_raw "Transformer\s*-\s*In\s+(?<transformer_name>\w+\s+Transformer)"
+| stats count by transformer_name
+| sort - count
+
