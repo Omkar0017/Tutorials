@@ -1,0 +1,98 @@
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.ValueMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+class KafkaStreamFactoryImplTest {
+
+    private KafkaStreamFactoryImpl kafkaStreamFactory;
+
+    @Mock
+    private KafkaStreamsConfig kafkaStreamsConfig;
+
+    @Mock
+    private StreamsBuilder streamsBuilder;
+
+    @Mock
+    private KafkaStreamConfig streamConfig;
+
+    @Mock
+    private KafkaTransformer transformer;
+
+    @Mock
+    private MessageFailureHandler messageFailureHandler;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        kafkaStreamFactory = new KafkaStreamFactoryImpl(kafkaStreamsConfig);
+    }
+
+    @Test
+    void testBuildKStream() {
+        // Arrange
+        String inputTopic = "input-topic";
+        String outputTopic = "output-topic";
+
+        when(streamConfig.getInputTopic()).thenReturn(inputTopic);
+        when(streamConfig.getOutputTopic()).thenReturn(outputTopic);
+        when(kafkaStreamsConfig.getProperties()).thenReturn(new HashMap<>());
+
+        // Act
+        kafkaStreamFactory.buildkstream(streamsBuilder, streamConfig, transformer, messageFailureHandler);
+
+        // Assert
+        verify(streamsBuilder).stream(eq(inputTopic), any(Consumed.class));
+        // Additional verifications for chaining if necessary
+    }
+
+    @Test
+    void testGetValueMapperSuccessfulTransformation() {
+        // Arrange
+        String topic = "test-topic";
+        KafkaMessageDto mockMessageDto = mock(KafkaMessageDto.class);
+        Object originalObject = mockMessageDto;
+        Object transformedObject = new Object();
+
+        when(mockMessageDto.getDeserialized()).thenReturn(new Object());
+        when(transformer.transform(any())).thenReturn(transformedObject);
+
+        ValueMapper<Object, Object> valueMapper = kafkaStreamFactory.getValueMapper(transformer, topic, messageFailureHandler);
+
+        // Act
+        Object result = valueMapper.apply(originalObject);
+
+        // Assert
+        assertEquals(transformedObject, result);
+        verify(transformer).transform(any());
+        verifyNoInteractions(messageFailureHandler);
+    }
+
+    @Test
+    void testGetValueMapperHandlesTransformerException() {
+        // Arrange
+        String topic = "test-topic";
+        KafkaMessageDto mockMessageDto = mock(KafkaMessageDto.class);
+        Object originalObject = mockMessageDto;
+        TransformerException transformerException = mock(TransformerException.class);
+
+        when(mockMessageDto.getDeserialized()).thenReturn(new Object());
+        when(transformer.transform(any())).thenThrow(transformerException);
+        when(transformerException.getErrorResult()).thenReturn("error-result");
+
+        ValueMapper<Object, Object> valueMapper = kafkaStreamFactory.getValueMapper(transformer, topic, messageFailureHandler);
+
+        // Act
+        Object result = valueMapper.apply(originalObject);
+
+        // Assert
+        assertEquals("error-result", result);
+        verify(messageFailureHandler).handle(originalObject, topic);
+    }
+}
