@@ -96,3 +96,8 @@ class KafkaStreamFactoryImplTest {
         verify(messageFailureHandler).handle(originalObject, topic);
     }
 }
+
+
+    KStream<Object, Object> mockKStream = mock(KStream.class);
+    when(streamsBuilder.stream(eq(inputTopic), any(Consumed.class))).thenReturn(mockKStream);
+    when(mockKStream.mapValues(any(ValueMapper.class))).thenReturn(mockKStream);
