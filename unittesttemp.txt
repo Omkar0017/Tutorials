@@ -171,3 +171,86 @@ class VersionLoggingServiceTest {
     }
 }
 
+
+
+
+-----
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.slf4j.Logger;
+import org.springframework.context.ApplicationContext;
+
+import static org.mockito.Mockito.*;
+
+class ShutdownBehaviourImplTest {
+
+    private ShutdownBehaviourImpl shutdownBehaviour;
+
+    @Mock
+    private ApplicationContext context;
+
+    @Mock
+    private Processor processor;
+
+    @Mock
+    private Logger logger;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        MockitoAnnotations.openMocks(this);
+        shutdownBehaviour = new ShutdownBehaviourImpl();
+        shutdownBehaviour.context = context;
+
+        // Inject mock logger into the class
+        var loggerField = ShutdownBehaviourImpl.class.getDeclaredField("log");
+        loggerField.setAccessible(true);
+        loggerField.set(null, logger); // Assign static logger
+    }
+
+    @Test
+    void testShutdownWithProcessor() {
+        // Arrange
+        Throwable exception = new RuntimeException("Test exception");
+        String loggingMsg = "Error occurred during shutdown";
+
+        // Act
+        doNothing().when(processor).closeStreams();
+        doThrow(new RuntimeException("Test halt")).when(Runtime.getRuntime()).halt(-1);
+
+        try {
+            shutdownBehaviour.shutdown(exception, loggingMsg, processor);
+        } catch (RuntimeException e) {
+            // Ignore exception thrown by halt
+        }
+
+        // Assert
+        verify(logger).error(loggingMsg, exception);
+        verify(processor).closeStreams();
+    }
+
+    @Test
+    void testShutdownWithoutProcessor() {
+        // Arrange
+        Throwable exception = new RuntimeException("Test exception");
+        String loggingMsg = "Error occurred during shutdown";
+
+        // Act
+        doThrow(new RuntimeException("Test halt")).when(Runtime.getRuntime()).halt(-1);
+
+        try {
+            shutdownBehaviour.shutdown(exception, loggingMsg, null);
+        } catch (RuntimeException e) {
+            // Ignore exception thrown by halt
+        }
+
+        // Assert
+        verify(logger).error(loggingMsg, exception);
+        verifyNoInteractions(processor);
+    }
+}
+
+
+
+
