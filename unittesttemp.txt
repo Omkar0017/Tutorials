@@ -101,3 +101,73 @@ class KafkaStreamFactoryImplTest {
     KStream<Object, Object> mockKStream = mock(KStream.class);
     when(streamsBuilder.stream(eq(inputTopic), any(Consumed.class))).thenReturn(mockKStream);
     when(mockKStream.mapValues(any(ValueMapper.class))).thenReturn(mockKStream);
+
+
+
+
+---------
+
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.slf4j.Logger;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+
+import static org.mockito.Mockito.*;
+
+class VersionLoggingServiceTest {
+
+    private VersionLoggingService versionLoggingService;
+
+    @Mock
+    private BuildInfo buildInfo;
+
+    @Mock
+    private Logger logger;
+
+    @Mock
+    private ApplicationReadyEvent applicationReadyEvent;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        versionLoggingService = new VersionLoggingService();
+        versionLoggingService.buildInfo = buildInfo;
+
+        // Inject mock logger using reflection or setter if possible
+        var loggerField = VersionLoggingService.class.getDeclaredField("logger");
+        loggerField.setAccessible(true);
+        loggerField.set(null, logger); // Assign static field
+    }
+
+    @Test
+    void testLogVersion() {
+        // Arrange
+        String mockBuildInfoJson = "{\"version\":\"1.0.0\"}";
+        when(buildInfo.toJSON()).thenReturn(mockBuildInfoJson);
+
+        // Act
+        versionLoggingService.logVersion();
+
+        // Assert
+        verify(buildInfo, times(1)).toJSON();
+        verify(logger, times(1)).info(mockBuildInfoJson);
+    }
+
+    @Test
+    void testOnStartup() {
+        // Arrange
+        String mockBuildInfoJson = "{\"version\":\"1.0.0\"}";
+        when(buildInfo.toJSON()).thenReturn(mockBuildInfoJson);
+
+        // Act
+        versionLoggingService.onStartup(applicationReadyEvent);
+
+        // Assert
+        verify(buildInfo, times(1)).toJSON();
+        verify(logger, times(1)).info(mockBuildInfoJson);
+    }
+}
+
