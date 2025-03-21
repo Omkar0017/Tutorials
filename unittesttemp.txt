@@ -1,334 +1,51 @@
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-import org.apache.kafka.common.serialization.Deserializer;
+import java.util.Properties;
+import java.util.Map;
+
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Map;
-import java.util.Properties;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
-class CustomAvroDeserializerTest {
+class KafkaReplayConsumerTest {
 
     @Mock
-    private SpecificAvroDeserializer specificAvroDeserializer;
+    private KafkaSecurityConfig kafkaSecurityConfig;
 
     @InjectMocks
-    private CustomAvroDeserializer customAvroDeserializer;
+    private KafkaReplayConsumer kafkaReplayConsumer;
 
-    private final String topic = "test-topic";
-    private final byte[] sampleBytes = new byte[]{1, 2, 3};
-    private final Object deserializedObject = "Deserialized Data";
-
+    private ReplayConfig replayConfig;
+    
     @BeforeEach
     void setUp() {
-        Properties properties = new Properties();
-        customAvroDeserializer = new CustomAvroDeserializer(properties);
-        customAvroDeserializer.obj = specificAvroDeserializer; // Inject mock manually
+        replayConfig = mock(ReplayConfig.class);
+        when(replayConfig.getBootstrapServersStr()).thenReturn("localhost:9092");
+        when(replayConfig.getConsumerProperties()).thenReturn(Map.of("group.id", "test-group"));
+        when(kafkaSecurityConfig.getSecurityConfig()).thenReturn(Map.of("security.protocol", "SSL"));
     }
 
     @Test
-    void testDeserializeSuccess() {
-        when(specificAvroDeserializer.deserialize(topic, sampleBytes)).thenReturn(deserializedObject);
-
-        KafkaMessageDto result = customAvroDeserializer.deserialize(topic, sampleBytes);
-
-        assertNotNull(result);
-        assertEquals(sampleBytes, result.getBytes());
-        assertEquals(deserializedObject, result.getPayload());
-        assertEquals(topic, result.getTopic());
-
-        verify(specificAvroDeserializer, times(1)).deserialize(topic, sampleBytes);
+    void testConsumerProperties() {
+        Properties properties = kafkaReplayConsumer.consumerProperties(replayConfig);
+        
+        assertEquals("localhost:9092", properties.getProperty("bootstrap.servers"));
+        assertEquals("test-group", properties.getProperty("group.id"));
+        assertEquals("SSL", properties.getProperty("security.protocol"));
     }
 
     @Test
-    void testDeserializeFailure() {
-        when(specificAvroDeserializer.deserialize(topic, sampleBytes))
-                .thenThrow(new RuntimeException("Mocked deserialization error"));
-
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            customAvroDeserializer.deserialize(topic, sampleBytes);
-        });
-
-        assertTrue(exception.getMessage().contains("Error with deserialization"));
-        verify(specificAvroDeserializer, times(1)).deserialize(topic, sampleBytes);
-    }
-
-    @Test
-    void testClose() {
-        customAvroDeserializer.close();
-        verify(specificAvroDeserializer, times(1)).close();
-    }
-
-    @Test
-    void testConfigure() {
-        Map<String, ?> settings = Map.of("key", "value");
-        assertDoesNotThrow(() -> customAvroDeserializer.configure(settings, false));
+    void testBuildKafkaReplayConsumer() {
+        Consumer<String, ReplayerDto> consumer = kafkaReplayConsumer.buildKafkaReplayConsumer(replayConfig);
+        
+        assertNotNull(consumer);
+        assertTrue(consumer instanceof KafkaConsumer);
     }
 }
-
-
----------------
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.Consumed;
-import org.apache.kafka.streams.kstream.ValueMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
-
-class KafkaStreamFactoryImplTest {
-
-    private KafkaStreamFactoryImpl kafkaStreamFactory;
-
-    @Mock
-    private KafkaStreamsConfig kafkaStreamsConfig;
-
-    @Mock
-    private StreamsBuilder streamsBuilder;
-
-    @Mock
-    private KafkaStreamConfig streamConfig;
-
-    @Mock
-    private KafkaTransformer transformer;
-
-    @Mock
-    private MessageFailureHandler messageFailureHandler;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        kafkaStreamFactory = new KafkaStreamFactoryImpl(kafkaStreamsConfig);
-    }
-
-    @Test
-    void testBuildKStream() {
-        // Arrange
-        String inputTopic = "input-topic";
-        String outputTopic = "output-topic";
-
-        when(streamConfig.getInputTopic()).thenReturn(inputTopic);
-        when(streamConfig.getOutputTopic()).thenReturn(outputTopic);
-        when(kafkaStreamsConfig.getProperties()).thenReturn(new HashMap<>());
-
-        // Act
-        kafkaStreamFactory.buildkstream(streamsBuilder, streamConfig, transformer, messageFailureHandler);
-
-        // Assert
-        verify(streamsBuilder).stream(eq(inputTopic), any(Consumed.class));
-        // Additional verifications for chaining if necessary
-    }
-
-    @Test
-    void testGetValueMapperSuccessfulTransformation() {
-        // Arrange
-        String topic = "test-topic";
-        KafkaMessageDto mockMessageDto = mock(KafkaMessageDto.class);
-        Object originalObject = mockMessageDto;
-        Object transformedObject = new Object();
-
-        when(mockMessageDto.getDeserialized()).thenReturn(new Object());
-        when(transformer.transform(any())).thenReturn(transformedObject);
-
-        ValueMapper<Object, Object> valueMapper = kafkaStreamFactory.getValueMapper(transformer, topic, messageFailureHandler);
-
-        // Act
-        Object result = valueMapper.apply(originalObject);
-
-        // Assert
-        assertEquals(transformedObject, result);
-        verify(transformer).transform(any());
-        verifyNoInteractions(messageFailureHandler);
-    }
-
-    @Test
-    void testGetValueMapperHandlesTransformerException() {
-        // Arrange
-        String topic = "test-topic";
-        KafkaMessageDto mockMessageDto = mock(KafkaMessageDto.class);
-        Object originalObject = mockMessageDto;
-        TransformerException transformerException = mock(TransformerException.class);
-
-        when(mockMessageDto.getDeserialized()).thenReturn(new Object());
-        when(transformer.transform(any())).thenThrow(transformerException);
-        when(transformerException.getErrorResult()).thenReturn("error-result");
-
-        ValueMapper<Object, Object> valueMapper = kafkaStreamFactory.getValueMapper(transformer, topic, messageFailureHandler);
-
-        // Act
-        Object result = valueMapper.apply(originalObject);
-
-        // Assert
-        assertEquals("error-result", result);
-        verify(messageFailureHandler).handle(originalObject, topic);
-    }
-}
-
-
-    KStream<Object, Object> mockKStream = mock(KStream.class);
-    when(streamsBuilder.stream(eq(inputTopic), any(Consumed.class))).thenReturn(mockKStream);
-    when(mockKStream.mapValues(any(ValueMapper.class))).thenReturn(mockKStream);
-
-
-
-
----------
-
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.slf4j.Logger;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-
-import static org.mockito.Mockito.*;
-
-class VersionLoggingServiceTest {
-
-    private VersionLoggingService versionLoggingService;
-
-    @Mock
-    private BuildInfo buildInfo;
-
-    @Mock
-    private Logger logger;
-
-    @Mock
-    private ApplicationReadyEvent applicationReadyEvent;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        versionLoggingService = new VersionLoggingService();
-        versionLoggingService.buildInfo = buildInfo;
-
-        // Inject mock logger using reflection or setter if possible
-        var loggerField = VersionLoggingService.class.getDeclaredField("logger");
-        loggerField.setAccessible(true);
-        loggerField.set(null, logger); // Assign static field
-    }
-
-    @Test
-    void testLogVersion() {
-        // Arrange
-        String mockBuildInfoJson = "{\"version\":\"1.0.0\"}";
-        when(buildInfo.toJSON()).thenReturn(mockBuildInfoJson);
-
-        // Act
-        versionLoggingService.logVersion();
-
-        // Assert
-        verify(buildInfo, times(1)).toJSON();
-        verify(logger, times(1)).info(mockBuildInfoJson);
-    }
-
-    @Test
-    void testOnStartup() {
-        // Arrange
-        String mockBuildInfoJson = "{\"version\":\"1.0.0\"}";
-        when(buildInfo.toJSON()).thenReturn(mockBuildInfoJson);
-
-        // Act
-        versionLoggingService.onStartup(applicationReadyEvent);
-
-        // Assert
-        verify(buildInfo, times(1)).toJSON();
-        verify(logger, times(1)).info(mockBuildInfoJson);
-    }
-}
-
-
-
-
------
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.slf4j.Logger;
-import org.springframework.context.ApplicationContext;
-
-import static org.mockito.Mockito.*;
-
-class ShutdownBehaviourImplTest {
-
-    private ShutdownBehaviourImpl shutdownBehaviour;
-
-    @Mock
-    private ApplicationContext context;
-
-    @Mock
-    private Processor processor;
-
-    @Mock
-    private Logger logger;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        MockitoAnnotations.openMocks(this);
-        shutdownBehaviour = new ShutdownBehaviourImpl();
-        shutdownBehaviour.context = context;
-
-        // Inject mock logger into the class
-        var loggerField = ShutdownBehaviourImpl.class.getDeclaredField("log");
-        loggerField.setAccessible(true);
-        loggerField.set(null, logger); // Assign static logger
-    }
-
-    @Test
-    void testShutdownWithProcessor() {
-        // Arrange
-        Throwable exception = new RuntimeException("Test exception");
-        String loggingMsg = "Error occurred during shutdown";
-
-        // Act
-        doNothing().when(processor).closeStreams();
-        doThrow(new RuntimeException("Test halt")).when(Runtime.getRuntime()).halt(-1);
-
-        try {
-            shutdownBehaviour.shutdown(exception, loggingMsg, processor);
-        } catch (RuntimeException e) {
-            // Ignore exception thrown by halt
-        }
-
-        // Assert
-        verify(logger).error(loggingMsg, exception);
-        verify(processor).closeStreams();
-    }
-
-    @Test
-    void testShutdownWithoutProcessor() {
-        // Arrange
-        Throwable exception = new RuntimeException("Test exception");
-        String loggingMsg = "Error occurred during shutdown";
-
-        // Act
-        doThrow(new RuntimeException("Test halt")).when(Runtime.getRuntime()).halt(-1);
-
-        try {
-            shutdownBehaviour.shutdown(exception, loggingMsg, null);
-        } catch (RuntimeException e) {
-            // Ignore exception thrown by halt
-        }
-
-        // Assert
-        verify(logger).error(loggingMsg, exception);
-        verifyNoInteractions(processor);
-    }
-}
-
-
-
-
